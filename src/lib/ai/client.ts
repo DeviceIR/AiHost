@@ -53,10 +53,29 @@ async function askOpenAICompatible({ provider, prompt, history, attachments = []
     content: item.content,
   }));
 
-  messages.push({
-    role: "user",
-    content: mapOpenAIContent(prompt, attachments),
-  });
+  const hasImageAttachment = attachments.some((item) => item.mimeType.startsWith("image/"));
+
+  if (hasImageAttachment) {
+    messages.push({
+      role: "user",
+      content: mapOpenAIContent(prompt, attachments),
+    });
+  } else {
+    const textAttachments = attachments
+      .map((item) => {
+        if (item.mimeType.startsWith("text/")) {
+          return `Attached file ${item.fileName}: ${Buffer.from(item.contentBase64, "base64").toString("utf8").slice(0, 4000)}`;
+        }
+        return `Attached file ${item.fileName} (${item.mimeType})`;
+      })
+      .join("\n");
+
+    const mergedContent = [prompt, textAttachments].filter(Boolean).join("\n\n").trim();
+    messages.push({
+      role: "user",
+      content: mergedContent,
+    });
+  }
 
   const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
