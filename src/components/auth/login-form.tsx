@@ -13,7 +13,15 @@ import { loginSchema } from "@/lib/validators/schemas";
 
 type LoginValues = z.infer<typeof loginSchema>;
 
-export function LoginForm({ locale }: { locale: string }) {
+export function LoginForm({
+  locale,
+  allowGoogle,
+  allowGitHub,
+}: {
+  locale: string;
+  allowGoogle: boolean;
+  allowGitHub: boolean;
+}) {
   const t = useTranslations("auth");
   const router = useRouter();
   const [error, setError] = useState<string>("");
@@ -71,22 +79,28 @@ export function LoginForm({ locale }: { locale: string }) {
       <button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-primaryText">
         {t("submit")}
       </button>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => signIn("google", { callbackUrl: `/${locale}/chat` })}
-          className="rounded-xl border border-border px-3 py-2"
-        >
-          Google
-        </button>
-        <button
-          type="button"
-          onClick={() => signIn("github", { callbackUrl: `/${locale}/chat` })}
-          className="rounded-xl border border-border px-3 py-2"
-        >
-          GitHub
-        </button>
-      </div>
+      {allowGoogle || allowGitHub ? (
+        <div className={`grid gap-2 ${allowGoogle && allowGitHub ? "grid-cols-2" : "grid-cols-1"}`}>
+          {allowGoogle ? (
+            <button
+              type="button"
+              onClick={() => signIn("google", { callbackUrl: `/${locale}/chat` })}
+              className="rounded-xl border border-border px-3 py-2"
+            >
+              Google
+            </button>
+          ) : null}
+          {allowGitHub ? (
+            <button
+              type="button"
+              onClick={() => signIn("github", { callbackUrl: `/${locale}/chat` })}
+              className="rounded-xl border border-border px-3 py-2"
+            >
+              GitHub
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <Link className="block text-sm text-muted" href={`/${locale}/signup`}>
         {t("goSignup")}
       </Link>
