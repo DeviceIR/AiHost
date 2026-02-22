@@ -25,6 +25,7 @@ GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 GITHUB_ID=""
 GITHUB_SECRET=""
+OPENAI_API_KEY=""
 MANAGER_EMAIL="manager@example.com"
 MANAGER_PASSWORD="Manager123!"
 BLOB_READ_WRITE_TOKEN=""
@@ -66,6 +67,7 @@ Add all vars from `.env` to your Vercel project, especially:
 - `NEXTAUTH_SECRET`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `GITHUB_ID`, `GITHUB_SECRET`
+- `OPENAI_API_KEY` (optional fallback when OpenAI provider key is empty in admin panel)
 - `MANAGER_EMAIL`, `MANAGER_PASSWORD`
 - `BLOB_READ_WRITE_TOKEN`
 

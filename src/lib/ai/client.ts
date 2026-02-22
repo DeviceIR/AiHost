@@ -151,13 +151,25 @@ async function askGemini({ provider, prompt, attachments = [], history }: AskAiP
 }
 
 export async function askAi(params: AskAiParams) {
-  if (!params.provider.apiKey) {
+  const effectiveApiKey =
+    params.provider.apiKey.trim() ||
+    (params.provider.type === ProviderType.OPENAI ? process.env.OPENAI_API_KEY?.trim() || "" : "");
+
+  if (!effectiveApiKey) {
     throw new Error("This model has no API key configured by manager.");
   }
 
-  if (params.provider.type === ProviderType.GEMINI) {
-    return askGemini(params);
+  const withKey = {
+    ...params,
+    provider: {
+      ...params.provider,
+      apiKey: effectiveApiKey,
+    },
+  };
+
+  if (withKey.provider.type === ProviderType.GEMINI) {
+    return askGemini(withKey);
   }
 
-  return askOpenAICompatible(params);
+  return askOpenAICompatible(withKey);
 }
