@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AiHost
 
-## Getting Started
+Next.js + TypeScript AI chat platform with:
+- NextAuth (Credentials, Google, GitHub)
+- Role-based access (`MANAGER`, `VIP`, `MEMBER`)
+- Chat history + model selection
+- Manager control panel for providers/models/users
+- i18n (`en`, `fa`) and light/dark themes
+- Tailwind CSS + TanStack Query
 
-First, run the development server:
+## 1) Local Setup
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Set `.env` values:
+
+```env
+DATABASE_URL="postgresql://user:password@host/dbname?sslmode=require"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-long-random-secret"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GITHUB_ID=""
+GITHUB_SECRET=""
+MANAGER_EMAIL="manager@example.com"
+MANAGER_PASSWORD="Manager123!"
+BLOB_READ_WRITE_TOKEN=""
+```
+
+Initialize DB:
+
+```bash
+npm run prisma:generate
+npm run prisma:push
+npm run prisma:seed
+```
+
+Run app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 2) OAuth Callback URLs
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+For local development:
+- GitHub: `http://localhost:3000/api/auth/callback/github`
+- Google: `http://localhost:3000/api/auth/callback/google`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For production replace host with your real domain.
 
-## Learn More
+## 3) Vercel Deployment (Recommended)
 
-To learn more about Next.js, take a look at the following resources:
+### A. Services
+- App hosting: Vercel
+- Database: Neon Postgres
+- Upload storage: Vercel Blob
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### B. Vercel Environment Variables
+Add all vars from `.env` to your Vercel project, especially:
+- `DATABASE_URL` (Neon Postgres connection string, not Data API URL)
+- `NEXTAUTH_URL` (`https://your-domain.com`)
+- `NEXTAUTH_SECRET`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- `GITHUB_ID`, `GITHUB_SECRET`
+- `MANAGER_EMAIL`, `MANAGER_PASSWORD`
+- `BLOB_READ_WRITE_TOKEN`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### C. Build / Prisma
+`postinstall` already runs `prisma generate`.
+After env vars are configured, run one DB sync:
 
-## Deploy on Vercel
+```bash
+npm run prisma:push
+npm run prisma:seed
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+You can run these from local machine against the Neon DB, or in CI.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### D. Blob Upload Behavior
+- If `BLOB_READ_WRITE_TOKEN` exists, attachments upload to Vercel Blob.
+- If token is missing, app falls back to local `uploads/` directory (dev only).
+
+## 4) Manager Login
+
+Seed creates manager account from:
+- `MANAGER_EMAIL`
+- `MANAGER_PASSWORD`
+
+After login, open `/en/admin` to manage providers/models/users.

@@ -1,0 +1,33 @@
+{
+  "common": {
+    "appName": "AiHost",
+    "loading": "Loading...",
+    "theme": "Theme",
+    "language": "Language",
+    "logout": "Logout"
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "signupTitle": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "submit": "Submit",
+    "goSignup": "Need an account? Sign up",
+    "goLogin": "Have an account? Sign in"
+  },
+  "chat": {
+    "newChat": "New chat",
+    "placeholder": "Ask anything from AI...",
+    "upload": "Attach file/image",
+    "send": "Send",
+    "history": "Chat history",
+    "models": "Model"
+  },
+  "admin": {
+    "title": "Manager Panel",
+    "providers": "Providers",
+    "models": "Models",
+    "users": "Users"
+  }
+}

@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MANAGER
+  VIP
+  MEMBER
+}
+
+enum ProviderType {
+  OPENROUTER
+  OPENAI
+  DEEPSEEK
+  XAI
+  GEMINI
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(MEMBER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  chats    Chat[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model ProviderConfig {
+  id         String       @id @default(cuid())
+  name       String
+  type       ProviderType
+  baseUrl    String
+  apiKey     String
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  models     AIModel[]
+}
+
+model AIModel {
+  id               String         @id @default(cuid())
+  label            String
+  modelId          String
+  isFree           Boolean        @default(false)
+  isActive         Boolean        @default(true)
+  supportsVision   Boolean        @default(false)
+  providerConfigId String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  providerConfig ProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@unique([modelId, providerConfigId])
+}
+
+model Chat {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String    @default("New chat")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  chatId    String
+  modelId   String?
+  role      String
+  content   String
+  createdAt DateTime  @default(now())
+
+  chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  model       AIModel?  @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  messageId String
+  fileName  String
+  mimeType  String
+  size      Int
+  path      String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
