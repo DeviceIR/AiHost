@@ -84,6 +84,7 @@ async function askOpenAICompatible({ provider, prompt, history, attachments = []
 }
 
 async function askGemini({ provider, prompt, attachments = [], history }: AskAiParams) {
+  const normalizedModelId = provider.modelId.replace(/^models\//, "").trim();
   const contents: Array<Record<string, unknown>> = [];
 
   for (const item of history) {
@@ -110,7 +111,7 @@ async function askGemini({ provider, prompt, attachments = [], history }: AskAiP
   contents.push({ role: "user", parts });
 
   const response = await fetch(
-    `${provider.baseUrl.replace(/\/$/, "")}/models/${provider.modelId}:generateContent?key=${provider.apiKey}`,
+    `${provider.baseUrl.replace(/\/$/, "")}/models/${normalizedModelId}:generateContent?key=${provider.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
