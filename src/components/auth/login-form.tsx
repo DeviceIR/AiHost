@@ -17,6 +17,7 @@ export function LoginForm({ locale }: { locale: string }) {
   const t = useTranslations("auth");
   const router = useRouter();
   const [error, setError] = useState<string>("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -51,12 +52,21 @@ export function LoginForm({ locale }: { locale: string }) {
         className="w-full rounded-xl border border-border bg-bg px-3 py-2"
         {...form.register("email")}
       />
-      <input
-        placeholder={t("password")}
-        type="password"
-        className="w-full rounded-xl border border-border bg-bg px-3 py-2"
-        {...form.register("password")}
-      />
+      <div className="flex gap-2">
+        <input
+          placeholder={t("password")}
+          type={showPassword ? "text" : "password"}
+          className="w-full rounded-xl border border-border bg-bg px-3 py-2"
+          {...form.register("password")}
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((value) => !value)}
+          className="rounded-xl border border-border bg-bg px-3 py-2 text-sm"
+        >
+          {showPassword ? "Hide" : "Show"}
+        </button>
+      </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-primaryText">
         {t("submit")}
