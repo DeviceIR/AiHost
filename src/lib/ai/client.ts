@@ -102,6 +102,97 @@ async function askOpenAICompatible({ provider, prompt, history, attachments = []
   return data.choices?.[0]?.message?.content?.trim() || "No response";
 }
 
+function mapOpenAIResponsesContent(prompt: string, attachments: UploadedInput[] = []) {
+  const blocks: Array<Record<string, unknown>> = [{ type: "input_text", text: prompt }];
+
+  for (const attachment of attachments) {
+    if (attachment.mimeType.startsWith("image/")) {
+      blocks.push({
+        type: "input_image",
+        image_url: `data:${attachment.mimeType};base64,${attachment.contentBase64}`,
+      });
+    } else if (attachment.mimeType.startsWith("text/")) {
+      blocks.push({
+        type: "input_text",
+        text: `Attached file ${attachment.fileName}: ${Buffer.from(attachment.contentBase64, "base64").toString("utf8").slice(0, 4000)}`,
+      });
+    } else {
+      blocks.push({
+        type: "input_text",
+        text: `Attached file ${attachment.fileName} (${attachment.mimeType}) cannot be parsed directly.`,
+      });
+    }
+  }
+
+  return blocks;
+}
+
+async function askOpenAIResponses({ provider, prompt, history, attachments = [] }: AskAiParams) {
+  const input: Array<Record<string, unknown>> = history.map((item) => ({
+    role: item.role,
+    content: item.content,
+  }));
+
+  const hasImageAttachment = attachments.some((item) => item.mimeType.startsWith("image/"));
+
+  if (hasImageAttachment) {
+    input.push({
+      role: "user",
+      content: mapOpenAIResponsesContent(prompt, attachments),
+    });
+  } else {
+    const textAttachments = attachments
+      .map((item) => {
+        if (item.mimeType.startsWith("text/")) {
+          return `Attached file ${item.fileName}: ${Buffer.from(item.contentBase64, "base64").toString("utf8").slice(0, 4000)}`;
+        }
+        return `Attached file ${item.fileName} (${item.mimeType})`;
+      })
+      .join("\n");
+
+    const mergedContent = [prompt, textAttachments].filter(Boolean).join("\n\n").trim();
+    input.push({
+      role: "user",
+      content: mergedContent,
+    });
+  }
+
+  const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/responses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${provider.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: provider.modelId,
+      input,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Provider error: ${message}`);
+  }
+
+  const data = (await response.json()) as {
+    output_text?: string;
+    output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+  };
+
+  if (data.output_text?.trim()) {
+    return data.output_text.trim();
+  }
+
+  const extracted = data.output
+    ?.flatMap((item) => item.content || [])
+    .filter((item) => item.type?.includes("text") && item.text)
+    .map((item) => item.text as string)
+    .join("\n")
+    .trim();
+
+  return extracted || "No response";
+}
+
 async function askGemini({ provider, prompt, attachments = [], history }: AskAiParams) {
   const normalizedModelId = provider.modelId.replace(/^models\//, "").trim();
   const contents: Array<Record<string, unknown>> = [];
@@ -169,6 +260,10 @@ export async function askAi(params: AskAiParams) {
 
   if (withKey.provider.type === ProviderType.GEMINI) {
     return askGemini(withKey);
+  }
+
+  if (withKey.provider.type === ProviderType.OPENAI) {
+    return askOpenAIResponses(withKey);
   }
 
   return askOpenAICompatible(withKey);
