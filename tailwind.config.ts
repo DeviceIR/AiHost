@@ -20,6 +20,10 @@ const config: Config = {
       },
       borderRadius: {
         xl: "1rem",
+        "2xl": "1.15rem",
+      },
+      transitionTimingFunction: {
+        soft: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },

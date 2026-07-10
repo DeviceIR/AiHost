@@ -18,14 +18,18 @@
   },
   "chat": {
     "newChat": "New chat",
-    "placeholder": "Ask anything from AI...",
-    "upload": "Attach file/image",
+    "placeholder": "Ask anything…",
+    "upload": "Attach",
     "send": "Send",
-    "history": "Chat history",
-    "models": "Model"
+    "stop": "Stop",
+    "history": "Conversations",
+    "models": "Model",
+    "thinking": "Thinking",
+    "emptyTitle": "Start a conversation",
+    "emptyDescription": "Choose a model, ask a question, or attach a file. Responses stream live as they arrive."
   },
   "admin": {
-    "title": "Manager Panel",
+    "title": "Admin",
     "providers": "Providers",
     "models": "Models",
     "users": "Users"

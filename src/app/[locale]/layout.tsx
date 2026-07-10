@@ -18,9 +18,13 @@ export default async function LocaleLayout({
 
   const messages = (await import(`@/messages/${locale}.json`)).default;
 
+  const direction = locale === "fa" ? "rtl" : "ltr";
+
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
-      <div className="min-h-screen bg-bg text-text">{children}</div>
+      <div className="min-h-screen bg-bg text-text" dir={direction} lang={locale}>
+        {children}
+      </div>
     </NextIntlClientProvider>
   );
 }

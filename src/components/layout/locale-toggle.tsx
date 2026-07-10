@@ -13,7 +13,10 @@ export function LocaleToggle() {
   const href = `/${target}/${rest}`.replace(/\/$/, "") || `/${target}`;
 
   return (
-    <Link className="rounded-xl border border-border bg-card px-3 py-2 text-sm" href={href}>
+    <Link
+      className="inline-flex h-9 items-center rounded-xl border border-border/80 bg-card/90 px-3 text-sm transition hover:border-primary/40"
+      href={href}
+    >
       {target.toUpperCase()}
     </Link>
   );

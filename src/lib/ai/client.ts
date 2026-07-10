@@ -18,6 +18,7 @@ type AskAiParams = {
   prompt: string;
   history: { role: "user" | "assistant"; content: string }[];
   attachments?: UploadedInput[];
+  signal?: AbortSignal;
 };
 
 function mapOpenAIContent(prompt: string, attachments: UploadedInput[] = []) {
@@ -47,7 +48,7 @@ function mapOpenAIContent(prompt: string, attachments: UploadedInput[] = []) {
   return blocks;
 }
 
-async function askOpenAICompatible({ provider, prompt, history, attachments = [] }: AskAiParams) {
+function buildOpenAICompatibleMessages({ prompt, history, attachments = [] }: AskAiParams) {
   const messages: Array<Record<string, unknown>> = history.map((item) => ({
     role: item.role,
     content: item.content,
@@ -77,29 +78,7 @@ async function askOpenAICompatible({ provider, prompt, history, attachments = []
     });
   }
 
-  const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: provider.modelId,
-      messages,
-      temperature: 0.7,
-    }),
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Provider error: ${message}`);
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
-  return data.choices?.[0]?.message?.content?.trim() || "No response";
+  return messages;
 }
 
 function mapOpenAIResponsesContent(prompt: string, attachments: UploadedInput[] = []) {
@@ -127,7 +106,7 @@ function mapOpenAIResponsesContent(prompt: string, attachments: UploadedInput[] 
   return blocks;
 }
 
-async function askOpenAIResponses({ provider, prompt, history, attachments = [] }: AskAiParams) {
+function buildOpenAIResponsesInput({ prompt, history, attachments = [] }: AskAiParams) {
   const input: Array<Record<string, unknown>> = history.map((item) => ({
     role: item.role,
     content: item.content,
@@ -157,44 +136,10 @@ async function askOpenAIResponses({ provider, prompt, history, attachments = [] 
     });
   }
 
-  const response = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/responses`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: provider.modelId,
-      input,
-    }),
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Provider error: ${message}`);
-  }
-
-  const data = (await response.json()) as {
-    output_text?: string;
-    output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
-  };
-
-  if (data.output_text?.trim()) {
-    return data.output_text.trim();
-  }
-
-  const extracted = data.output
-    ?.flatMap((item) => item.content || [])
-    .filter((item) => item.type?.includes("text") && item.text)
-    .map((item) => item.text as string)
-    .join("\n")
-    .trim();
-
-  return extracted || "No response";
+  return input;
 }
 
-async function askGemini({ provider, prompt, attachments = [], history }: AskAiParams) {
-  const normalizedModelId = provider.modelId.replace(/^models\//, "").trim();
+function buildGeminiContents({ prompt, history, attachments = [] }: AskAiParams) {
   const contents: Array<Record<string, unknown>> = [];
 
   for (const item of history) {
@@ -214,18 +159,136 @@ async function askGemini({ provider, prompt, attachments = [], history }: AskAiP
         },
       });
     } else if (attachment.mimeType.startsWith("text/")) {
-      parts.push({ text: `Attached file ${attachment.fileName}: ${Buffer.from(attachment.contentBase64, "base64").toString("utf8").slice(0, 4000)}` });
+      parts.push({
+        text: `Attached file ${attachment.fileName}: ${Buffer.from(attachment.contentBase64, "base64").toString("utf8").slice(0, 4000)}`,
+      });
     }
   }
 
   contents.push({ role: "user", parts });
+  return contents;
+}
+
+async function* parseSseStream(response: Response): AsyncGenerator<string> {
+  if (!response.body) {
+    throw new Error("Provider returned an empty stream");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+
+      try {
+        const parsed = JSON.parse(payload) as {
+          choices?: Array<{ delta?: { content?: string }; text?: string }>;
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+          type?: string;
+          delta?: string;
+          text?: string;
+        };
+
+        const openAiChunk = parsed.choices?.[0]?.delta?.content;
+        if (openAiChunk) {
+          yield openAiChunk;
+          continue;
+        }
+
+        const geminiChunk = parsed.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+        if (geminiChunk) {
+          yield geminiChunk;
+          continue;
+        }
+
+        if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
+          yield parsed.delta;
+          continue;
+        }
+
+        if (typeof parsed.text === "string" && parsed.text) {
+          yield parsed.text;
+        }
+      } catch {
+        // Ignore malformed SSE chunks
+      }
+    }
+  }
+}
+
+async function* streamOpenAICompatible(params: AskAiParams): AsyncGenerator<string> {
+  const messages = buildOpenAICompatibleMessages(params);
+  const response = await fetch(`${params.provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.provider.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.provider.modelId,
+      messages,
+      temperature: 0.7,
+      stream: true,
+    }),
+    signal: params.signal,
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Provider error: ${message}`);
+  }
+
+  yield* parseSseStream(response);
+}
+
+async function* streamOpenAIResponses(params: AskAiParams): AsyncGenerator<string> {
+  const input = buildOpenAIResponsesInput(params);
+  const response = await fetch(`${params.provider.baseUrl.replace(/\/$/, "")}/responses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.provider.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: params.provider.modelId,
+      input,
+      stream: true,
+    }),
+    signal: params.signal,
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Provider error: ${message}`);
+  }
+
+  yield* parseSseStream(response);
+}
+
+async function* streamGemini(params: AskAiParams): AsyncGenerator<string> {
+  const normalizedModelId = params.provider.modelId.replace(/^models\//, "").trim();
+  const contents = buildGeminiContents(params);
 
   const response = await fetch(
-    `${provider.baseUrl.replace(/\/$/, "")}/models/${normalizedModelId}:generateContent?key=${provider.apiKey}`,
+    `${params.provider.baseUrl.replace(/\/$/, "")}/models/${normalizedModelId}:streamGenerateContent?alt=sse&key=${params.provider.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents }),
+      signal: params.signal,
     },
   );
 
@@ -234,14 +297,10 @@ async function askGemini({ provider, prompt, attachments = [], history }: AskAiP
     throw new Error(`Gemini error: ${message}`);
   }
 
-  const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-
-  return data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n").trim() || "No response";
+  yield* parseSseStream(response);
 }
 
-export async function askAi(params: AskAiParams) {
+function withResolvedKey(params: AskAiParams): AskAiParams {
   const effectiveApiKey =
     params.provider.apiKey.trim() ||
     (params.provider.type === ProviderType.OPENAI ? process.env.OPENAI_API_KEY?.trim() || "" : "");
@@ -250,21 +309,35 @@ export async function askAi(params: AskAiParams) {
     throw new Error("This model has no API key configured by manager.");
   }
 
-  const withKey = {
+  return {
     ...params,
     provider: {
       ...params.provider,
       apiKey: effectiveApiKey,
     },
   };
+}
+
+export async function* streamAi(params: AskAiParams): AsyncGenerator<string> {
+  const withKey = withResolvedKey(params);
 
   if (withKey.provider.type === ProviderType.GEMINI) {
-    return askGemini(withKey);
+    yield* streamGemini(withKey);
+    return;
   }
 
   if (withKey.provider.type === ProviderType.OPENAI) {
-    return askOpenAIResponses(withKey);
+    yield* streamOpenAIResponses(withKey);
+    return;
   }
 
-  return askOpenAICompatible(withKey);
+  yield* streamOpenAICompatible(withKey);
+}
+
+export async function askAi(params: AskAiParams) {
+  let answer = "";
+  for await (const chunk of streamAi(params)) {
+    answer += chunk;
+  }
+  return answer.trim() || "No response";
 }
